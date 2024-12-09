@@ -10,7 +10,7 @@
 
 
 
-#define CACHE_SIZE 10
+#define CACHE_SIZE 100
 #define BLOCK_SIZE 4096
 
 typedef struct CachePage {

@@ -198,18 +198,31 @@ int DanabolIoLatRead(char** argv) {
 }
 
 int PerformLinearRegression(const char* input_file, const char* output_file, long repetitions) {
-  FILE* in_fp = fopen(input_file, "r");
-  if (!in_fp) {
+  // Открытие входного файла
+  int in_fd = lab2_open(input_file);
+  if (in_fd == -1) {
+    perror("Failed to open input file");
     return -1;
   }
 
-  FILE* out_fp = fopen(output_file, "w");
-  if (!out_fp) {
-    (void)fclose(in_fp);
+  // Открытие выходного файла
+  int out_fd = lab2_open(output_file);
+  if (out_fd == -1) {
+    perror("Failed to open output file");
+    lab2_close(in_fd);
     return -1;
   }
 
   // Буфер для чтения данных
+  char line[LINE_SIZE];
+  char* buffer = aligned_alloc(BLOCK_SIZE, BLOCK_SIZE);
+  if (!buffer) {
+    perror("Failed to allocate buffer");
+    lab2_close(in_fd);
+    lab2_close(out_fd);
+    return -1;
+  }
+
   double x_val = 0;
   double y_val = 0;
   double sum_x = 0;
@@ -217,28 +230,47 @@ int PerformLinearRegression(const char* input_file, const char* output_file, lon
   double sum_xy = 0;
   double sum_x_squared = 0;
   int num = 0;
-  char line[LINE_SIZE];
+  ssize_t bytes_read = 0;
 
-  while (fgets(line, sizeof(line), in_fp)) {
-    char* endptr = NULL;
+  // Чтение данных из входного файла построчно
+  while ((bytes_read = lab2_read(in_fd, buffer, BLOCK_SIZE)) > 0) {
+    char* line_ptr = buffer;
+    while (line_ptr < buffer + bytes_read) {
+      strncpy(line, line_ptr, LINE_SIZE - 1);
+      line[LINE_SIZE - 1] = '\0';
 
-    errno = 0;
-    x_val = strtod(line, &endptr);
-    if (errno != 0 || endptr == line || *endptr == '\n') {
-      continue;
+      char* endptr = NULL;
+
+      errno = 0;
+      x_val = strtod(line, &endptr);
+      if (errno != 0 || endptr == line || *endptr == '\n') {
+        line_ptr += strlen(line) + 1;
+        continue;
+      }
+
+      errno = 0;
+      y_val = strtod(endptr, &endptr);
+      if (errno != 0 || endptr == line || (*endptr != '\0' && *endptr != '\n')) {
+        line_ptr += strlen(line) + 1;
+        continue;
+      }
+
+      sum_x += x_val;
+      sum_y += y_val;
+      sum_xy += x_val * y_val;
+      sum_x_squared += x_val * x_val;
+      num++;
+
+      line_ptr += strlen(line) + 1;
     }
+  }
 
-    errno = 0;
-    y_val = strtod(endptr, &endptr);
-    if (errno != 0 || endptr == line || (*endptr != '\0' && *endptr != '\n')) {
-      continue;
-    }
-
-    sum_x += x_val;
-    sum_y += y_val;
-    sum_xy += x_val * y_val;
-    sum_x_squared += x_val * x_val;
-    num++;
+  if (bytes_read == -1) {
+    perror("Failed to read input file");
+    free(buffer);
+    lab2_close(in_fd);
+    lab2_close(out_fd);
+    return -1;
   }
 
   // Выполнение линейной регрессии указанное количество раз
@@ -246,11 +278,22 @@ int PerformLinearRegression(const char* input_file, const char* output_file, lon
     double slope = (num * sum_xy - sum_x * sum_y) / (num * sum_x_squared - sum_x * sum_x);
     double intercept = (sum_y - slope * sum_x) / num;
 
-    fprintf(out_fp, "Iteration %d: Slope = %.6f, Intercept = %.6f\n", i + 1, slope, intercept);
+    char result[128];
+    snprintf(result, sizeof(result), "Iteration %d: Slope = %.6f, Intercept = %.6f\n", i + 1, slope, intercept);
+
+    if (lab2_write(out_fd, result, strlen(result)) == -1) {
+      perror("Failed to write output file");
+      free(buffer);
+      lab2_close(in_fd);
+      lab2_close(out_fd);
+      return -1;
+    }
   }
 
-  fclose(in_fp);
-  fclose(out_fp);
+  // Освобождение ресурсов
+  free(buffer);
+  lab2_close(in_fd);
+  lab2_close(out_fd);
   return 1;
 }
 
@@ -278,6 +321,7 @@ int DanabolLinReg(char** argv) {
 
   return PerformLinearRegression(input_file, output_file, repetitions);
 }
+
 
 typedef struct {
   const char* file_path;
