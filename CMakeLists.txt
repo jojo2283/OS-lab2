@@ -1,26 +1,18 @@
-cmake_minimum_required(VERSION 3.10)
+file(GLOB_RECURSE MONOLITH_SOURCES CONFIGURE_DEPENDS *.h *.c)
 
-# Название проекта
-project(block_cache LANGUAGES C)
+set(MONOLITH_LIB_SOURCES ${MONOLITH_SOURCES})
 
-# Включение отладочной информации и уровня предупреждений
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -g")
+set(MONOLITH_APP_SOURCES examples/Main.c)
 
-# Установка пути для заголовочных файлов
-include_directories(include)
+add_library(${PROJECT_NAME} STATIC ${MONOLITH_LIB_SOURCES})
+target_include_directories(${PROJECT_NAME} PUBLIC ${MONOLITH_INCLUDE_PATH})
 
-# Установка пути для сборки динамической библиотеки
-set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib)
 
-# Добавление библиотеки
-add_library(block_cache SHARED src/cache.c)
+add_executable(${PROJECT_NAME}-app ${MONOLITH_APP_SOURCES})
+set_property(TARGET ${PROJECT_NAME}-app PROPERTY OUTPUT_NAME ${PROJECT_NAME})
 
-# Пример использования
-add_executable(example examples/example.c)
-target_link_libraries(example block_cache)
+target_link_libraries(
+    ${PROJECT_NAME}-app PRIVATE
+    ${PROJECT_NAME}
+)
 
-# Тесты
-enable_testing()
-add_executable(test_cache tests/test_cache.c)
-target_link_libraries(test_cache block_cache)
-add_test(NAME CacheTest COMMAND test_cache)
